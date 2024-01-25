@@ -2,6 +2,7 @@
 use std::collections::vec_deque::VecDeque;
 
 use itertools::Itertools;
+use rand::seq::SliceRandom;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 enum Move {
@@ -49,23 +50,28 @@ fn find_place(elem: i32, stack: &mut Stack) -> usize {
         .inspect(|b| {})
         .find(|(_, w)| w[0] > elem && elem > w[1])
         .map(|(i, _)| i + 1)
-        .unwrap()
+        .unwrap_or_default()
 }
 
 fn do_move(state: &mut State, index: usize) {
     let target_index = find_place(state.a[index], &mut state.b);
 
+    /*
     let rotate_a = if state.a.len() / 2 > index {
         Rotates::Forward(index)
     } else {
-        Rotates::Reverse(index - state.a.len() / 2)
+        Rotates::Reverse(state.a.len() - index)
     };
 
     let rotate_b = if state.b.len() / 2 > target_index {
         Rotates::Forward(target_index)
     } else {
-        Rotates::Reverse(target_index - state.b.len() / 2)
+        Rotates::Reverse(state.b.len() - target_index)
     };
+    */
+
+    let rotate_a = Rotates::Forward(index);
+    let rotate_b = Rotates::Forward(target_index);
 
     dbg!(rotate_a);
     dbg!(rotate_b);
@@ -103,12 +109,13 @@ fn main() {
         eprintln!("Error:\nDuplicate numbers !");
         std::process::exit(1);
     }
+    state.a.make_contiguous().shuffle(&mut rand::thread_rng());
     dbg!(&state.a);
     if state.a.len() >= 2 {
         state.b.push_front(state.a.pop_front().unwrap());
         state.b.push_front(state.a.pop_front().unwrap());
     }
-    while state.a.len() > 2 {
+    while !state.a.is_empty() {
         let (max, min) = (
             *state.b.iter().max().unwrap(),
             *state.b.iter().min().unwrap(),
@@ -120,8 +127,10 @@ fn main() {
             .map(|(index, &elem)| {
                 (index, {
                     if elem > max || elem < min {
+                        println!("max/min");
                         target(index, 0, state.a.len()).abs()
                     } else {
+                        println!("middle");
                         let swap_a = target(index, 0, state.a.len());
                         let swap_b = target(0, find_place(elem, &mut state.b), state.b.len());
                         swap_a.abs().max(swap_b.abs())
