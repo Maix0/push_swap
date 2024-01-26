@@ -112,45 +112,27 @@ impl Rotates {
     }
 }
 
+fn optimize_moves(span: &[Move], output: &mut Vec<Moves>) {}
+
 fn do_move(state: &mut State, index: usize) {
-    let target_index = find_place(state.a[index], state);
+    let target_index = (find_place(state.a[index], state)
+        + (state.b.len() - state.b.iter().position_max().unwrap_or(0)))
+        % state.b.len();
     let rotate_a = target(0, index, state.a.len());
     let rotate_b = target(target_index, 0, state.b.len());
-    /*
-    println!("============================================================================");
-    dbg!(&state.b);
-    println!(
-        "rotating A by {rotate_a:?} to get number {} at index 0 from index {index}",
-        state.a[index]
-    );
-    println!(
-        "rotating B by {rotate_b:?} to get number {} at index {target_index} from index 0",
-        state.a[index]
-    );
-    */
-    /*match rotate_a {
-        Rotates::Forward(n) => state.a.rotate_right(n),
-        Rotates::Reverse(n) => state.a.rotate_left(n),
-    }
-    match rotate_b {
-        Rotates::Forward(n) => state.b.rotate_right(n),
-        Rotates::Reverse(n) => state.b.rotate_left(n),
-    }*/
-    //dbg!(&state.a);
     rotate_a.action(state, StackSelector::A);
     rotate_b.action(state, StackSelector::B);
     pb(state);
-    //state.b.push_front(state.a.pop_front().unwrap());
-    //dbg!(&state.b);
     if let Some(e) = state.sorted.iter_mut().find(|(e, _)| *e == state.b[0]) {
         e.1 = true;
     }
-    target(
-        0,
-        state.b.iter().position_min().unwrap_or_default(),
-        state.b.len(),
-    )
-    .action(state, StackSelector::B)
+
+    //target(
+    //    0,
+    //    state.b.iter().position_min().unwrap_or_default(),
+    //    state.b.len(),
+    //)
+    //.action(state, StackSelector::B)
 }
 
 const PRINT_ACTIONS: bool = false;
@@ -228,7 +210,7 @@ fn main() {
         .nth(2)
         .map(|i| i.parse::<u32>().unwrap_or(1024))
         .unwrap_or(1024)
-        .max(1024);
+        .max(1);
 
     let results = (0..iter_numbers)
         .into_par_iter()
@@ -282,7 +264,7 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<usize, ()> {
         .sorted
         .make_contiguous()
         .sort_unstable_by_key(|(e, _)| *e);
-    state.sorted.make_contiguous().reverse();
+    state.sorted.make_contiguous();
 
     // init
     pb(&mut state);
@@ -293,7 +275,7 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<usize, ()> {
     if let Some(e) = state.sorted.iter_mut().find(|(e, _)| *e == state.b[1]) {
         e.1 = true;
     }
-    if state.b[0] > state.b[1] {
+    if state.b[0] < state.b[1] {
         rb(&mut state);
     }
     // end of init
@@ -318,20 +300,20 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<usize, ()> {
     // end of sorting
     target(
         0,
-        state.b.iter().position_min().unwrap_or_default(),
+        state.b.iter().position_max().unwrap_or_default(),
         state.b.len(),
     )
     .action(&mut state, StackSelector::B);
 
     while !state.b.is_empty() {
         pa(&mut state);
-        rra(&mut state);
     }
 
     // everything should be in the correct place !
     if is_sorted(state.a.iter()) {
         Ok(state.counts)
     } else {
+        dbg!(&state.a);
         Err(())
     }
 }
