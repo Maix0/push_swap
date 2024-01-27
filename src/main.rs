@@ -1,6 +1,9 @@
 #![allow(dead_code)]
 #![allow(unused)]
-use std::collections::{vec_deque::VecDeque, HashSet};
+use std::{
+    collections::{vec_deque::VecDeque, HashSet},
+    ops::Add,
+};
 
 use itertools::Itertools;
 use rand::prelude::*;
@@ -17,6 +20,9 @@ enum Move {
     RevRotateBoth,
     PushA,
     PushB,
+    SwapA,
+    SwapB,
+    SwapBoth,
 }
 
 type Stack<T = i32> = VecDeque<T>;
@@ -148,16 +154,13 @@ fn optimize_moves(state: &mut State, mut cpy: State) -> usize {
             Move::PushB => pb(&mut cpy),
             Move::RotateA => ra(&mut cpy),
             Move::RotateB => rb(&mut cpy),
-            Move::RotateBoth => {
-                ra(&mut cpy);
-                rb(&mut cpy);
-            }
+            Move::RotateBoth => rr(&mut cpy),
             Move::RevRotateA => rra(&mut cpy),
             Move::RevRotateB => rrb(&mut cpy),
-            Move::RevRotateBoth => {
-                rra(&mut cpy);
-                rrb(&mut cpy);
-            }
+            Move::RevRotateBoth => rrr(&mut cpy),
+            Move::SwapA => sa(&mut cpy),
+            Move::SwapB => sb(&mut cpy),
+            Move::SwapBoth => ss(&mut cpy),
         }
     }
     if is_sorted(cpy.a.iter()) {
@@ -171,7 +174,7 @@ fn optimize_moves(state: &mut State, mut cpy: State) -> usize {
 
 fn optimize_moves_span(mut span: &[Move], output: &mut Vec<Move>) {
     while !span.is_empty() {
-        let first = span.get(0).unwrap();
+        let first = span.first().unwrap();
         let position = span
             .iter()
             .find_position(|s| *s != first)
@@ -250,146 +253,12 @@ fn optimize_moves_span_inner(span: &[Move], output: &mut Vec<Move>) {
     }
 }
 
-fn do_move(state: &mut State, index: usize) {
-    let target_index = (find_place(state.a[index], state)
-        + (state.b.len() - state.b.iter().position_max().unwrap_or(0)))
-        % state.b.len();
-    let mut rotate_a = target(0, index, state.a.len());
-    let mut rotate_b = target(target_index, 0, state.b.len());
-
-    if (std::mem::discriminant(&rotate_a) != std::mem::discriminant(&rotate_b)) {
-        let diff_flip_a = {
-            let (Rotates::Forward(a) | Rotates::Reverse(a)) = rotate_a.flip(state.a.len());
-            let (Rotates::Forward(b) | Rotates::Reverse(b)) = rotate_b; //.flip(state.a.len());
-            a.abs_diff(b)
-        };
-        let diff_flip_b = {
-            let (Rotates::Forward(a) | Rotates::Reverse(a)) = rotate_a; // .flip(state.a.len());
-            let (Rotates::Forward(b) | Rotates::Reverse(b)) = rotate_b.flip(state.b.len());
-            a.abs_diff(b)
-        };
-        if (diff_flip_a > diff_flip_b) {
-            rotate_b = rotate_b.flip(state.b.len());
-        } else {
-            rotate_a = rotate_a.flip(state.a.len());
-        }
-    }
-
-    let (Rotates::Forward(a) | Rotates::Reverse(a)) = rotate_a; // .flip(state.a.len());
-    let (Rotates::Forward(b) | Rotates::Reverse(b)) = rotate_b;
-    for _ in 0..a.min(b) {
-        match rotate_a {
-            Rotates::Forward(_) => rr(state),
-            Rotates::Reverse(_) => rrr(state),
-        }
-    }
-    if a < b {
-        for _ in 0..(b - a) {
-            match rotate_a {
-                Rotates::Forward(_) => rb(state),
-                Rotates::Reverse(_) => rrb(state),
-            }
-        }
-    } else {
-        for _ in 0..(a - b) {
-            match rotate_a {
-                Rotates::Forward(_) => ra(state),
-                Rotates::Reverse(_) => rra(state),
-            }
-        }
-    }
-    pb(state);
-    if let Some(e) = state.sorted.iter_mut().find(|(e, _)| *e == state.b[0]) {
-        e.1 = true;
-    }
-
-    //target(
-    //    0,
-    //    state.b.iter().position_min().unwrap_or_default(),
-    //    state.b.len(),
-    //)
-    //.action(state, StackSelector::B)
-}
-
-const PRINT_ACTIONS: bool = false;
-
-macro_rules! print_action {
-    ($state:expr, $($t:tt)*) => {
-        if PRINT_ACTIONS {
-            let writer: &mut dyn std::io::Write = &mut std::io::stdout();
-            write!(writer, $($t)*).unwrap();
-        }
-    };
-}
-
 fn is_sorted<I>(data: I) -> bool
 where
     I: IntoIterator,
     I::Item: Ord + Clone,
 {
     data.into_iter().tuple_windows().all(|(a, b)| a <= b)
-}
-
-fn ra(state: &mut State) {
-    state.a.rotate_right(1);
-    print_action!(state, "RA");
-    state.counts += 1;
-    state.moves.push(Move::RotateA)
-}
-
-fn rb(state: &mut State) {
-    state.b.rotate_right(1);
-    print_action!(state, "RB");
-    state.counts += 1;
-    state.moves.push(Move::RotateA)
-}
-
-fn rr(state: &mut State) {
-    state.a.rotate_right(1);
-    state.b.rotate_right(1);
-    print_action!(state, "RR");
-    state.counts += 1;
-    state.moves.push(Move::RotateBoth)
-}
-
-fn rra(state: &mut State) {
-    state.a.rotate_left(1);
-    print_action!(state, "RRA");
-    state.counts += 1;
-    state.moves.push(Move::RevRotateA)
-}
-
-fn rrb(state: &mut State) {
-    state.b.rotate_left(1);
-    print_action!(state, "RRB");
-    state.counts += 1;
-    state.moves.push(Move::RevRotateB)
-}
-
-fn rrr(state: &mut State) {
-    state.a.rotate_left(1);
-    state.b.rotate_left(1);
-    print_action!(state, "RRR");
-    state.counts += 1;
-    state.moves.push(Move::RevRotateBoth)
-}
-
-fn pa(state: &mut State) {
-    if let Some(e) = state.b.pop_front() {
-        state.a.push_front(e);
-    }
-    print_action!(state, "PA");
-    state.counts += 1;
-    state.moves.push(Move::PushA)
-}
-
-fn pb(state: &mut State) {
-    if let Some(e) = state.a.pop_front() {
-        state.b.push_front(e);
-    }
-    print_action!(state, "PB");
-    state.counts += 1;
-    state.moves.push(Move::PushB)
 }
 
 fn main() {
@@ -456,40 +325,276 @@ fn main() {
     }
 }
 
-fn sort_three_b(state: &mut State) {
-    let mut c = state.b.clone();
+const PRINT_ACTIONS: bool = false;
+
+macro_rules! print_action {
+    ($state:expr, $($t:tt)*) => {
+        if PRINT_ACTIONS {
+            let writer: &mut dyn std::io::Write = &mut std::io::stdout();
+            write!(writer, $($t)*).unwrap();
+        }
+    };
+}
+fn ra(state: &mut State) {
+    state.a.rotate_right(1);
+    print_action!(state, "RA");
+    state.counts += 1;
+    state.moves.push(Move::RotateA)
+}
+
+fn rb(state: &mut State) {
+    state.b.rotate_right(1);
+    print_action!(state, "RB");
+    state.counts += 1;
+    state.moves.push(Move::RotateA)
+}
+
+fn rr(state: &mut State) {
+    state.a.rotate_right(1);
+    state.b.rotate_right(1);
+    print_action!(state, "RR");
+    state.counts += 1;
+    state.moves.push(Move::RotateBoth)
+}
+
+fn rra(state: &mut State) {
+    state.a.rotate_left(1);
+    print_action!(state, "RRA");
+    state.counts += 1;
+    state.moves.push(Move::RevRotateA)
+}
+
+fn rrb(state: &mut State) {
+    state.b.rotate_left(1);
+    print_action!(state, "RRB");
+    state.counts += 1;
+    state.moves.push(Move::RevRotateB)
+}
+
+fn rrr(state: &mut State) {
+    state.a.rotate_left(1);
+    state.b.rotate_left(1);
+    print_action!(state, "RRR");
+    state.counts += 1;
+    state.moves.push(Move::RevRotateBoth)
+}
+
+fn pa(state: &mut State) {
+    if let Some(e) = state.b.pop_front() {
+        state.a.push_front(e);
+    }
+    print_action!(state, "PA");
+    state.counts += 1;
+    state.moves.push(Move::PushA)
+}
+
+fn pb(state: &mut State) {
+    if let Some(e) = state.a.pop_front() {
+        state.b.push_front(e);
+    }
+    print_action!(state, "PB");
+    state.counts += 1;
+    state.moves.push(Move::PushB)
+}
+
+fn sa(state: &mut State) {
+    let sec = state.a.pop_front();
+    let fir = state.a.pop_front();
+    if let Some(e) = sec {
+        state.a.push_front(e);
+    }
+    if let Some(e) = fir {
+        state.a.push_front(e);
+    }
+    print_action!(state, "SA");
+    state.counts += 1;
+    state.moves.push(Move::SwapA)
+}
+
+fn sb(state: &mut State) {
+    let sec = state.b.pop_front();
+    let fir = state.b.pop_front();
+    if let Some(e) = sec {
+        state.b.push_front(e);
+    }
+    if let Some(e) = fir {
+        state.b.push_front(e);
+    }
+    print_action!(state, "SB");
+    state.counts += 1;
+    state.moves.push(Move::SwapB)
+}
+fn ss(state: &mut State) {
+    let sec = state.b.pop_front();
+    let fir = state.b.pop_front();
+    if let Some(e) = sec {
+        state.b.push_front(e);
+    }
+    if let Some(e) = fir {
+        state.b.push_front(e);
+    }
+    let sec = state.a.pop_front();
+    let fir = state.a.pop_front();
+    if let Some(e) = sec {
+        state.a.push_front(e);
+    }
+    if let Some(e) = fir {
+        state.a.push_front(e);
+    }
+    print_action!(state, "SS");
+    state.counts += 1;
+    state.moves.push(Move::SwapBoth)
+}
+
+fn sort_three(state: &mut State, selector: StackSelector, min_first: bool) {
+    macro_rules! stack {
+        () => {
+            match selector {
+                StackSelector::B => &mut state.b,
+                StackSelector::A => &mut state.a,
+            }
+        };
+    }
+    let [swap, rotate, rev_rotate] = match selector {
+        StackSelector::A => [sa, ra, rra],
+        StackSelector::B => [sb, rb, rrb],
+    };
+    match stack!().len() {
+        0 | 1 | 4.. => return,
+        2 => {
+            let func = match min_first {
+                true => PartialOrd::gt,
+                false => PartialOrd::lt,
+            };
+
+            if func(&stack!()[0].clone(), &stack!()[1]) {
+                swap(state);
+            }
+            return;
+        }
+        3 => {}
+    }
+    let mut c = stack!().clone();
     macro_rules! comb {
         ($i1:literal, $i2:literal, $i3:literal) => {
-            [c[$i1 - 1], c[$i2 - 1], c[$i3 - 1]]
+            &[c[$i1 - 1], c[$i2 - 1], c[$i3 - 1]]
         };
     }
     c.make_contiguous().sort_unstable();
-    state.b.make_contiguous();
-    if (state.b == comb![1, 2, 3]/* abc */) {
-        return;
+    if min_first {
+        c.make_contiguous().reverse();
     }
-    if (state.b == comb![1, 3, 2]/* acb */) {
-        rrb(state);
-        //swap
-        rb(state);
+    stack!().make_contiguous();
+
+    if (stack!() == comb![1, 2, 3]/* abc */) {
+        swap(state);
+        rotate(state);
+    } else if (stack!() == comb![1, 3, 2]/* acb */) {
+        rev_rotate(state);
+    } else if (stack!() == comb![2, 3, 1]/* bca */) {
+        swap(state);
+    } else if (stack!() == comb![2, 1, 3]/* bac */) {
+        rev_rotate(state);
+    } else if (stack!() == comb![3, 2, 1]/* cba */) {
+    } else if (stack!() == comb![3, 1, 2]/* cab */) {
+        rev_rotate(state);
+        swap(state);
+        rotate(state);
     }
-    if (state.b == comb![2, 3, 1]/* bca */) {
-        rb(state);
-        //SWAP
-        rb(state);
+}
+
+fn do_move(state: &mut State, index: usize) {
+    let (rotate_a, rotate_b) = find_best_rotate_for_item(index, state, StackSelector::A, false);
+
+    let (Rotates::Forward(a) | Rotates::Reverse(a)) = rotate_a; // .flip(state.a.len());
+    let (Rotates::Forward(b) | Rotates::Reverse(b)) = rotate_b;
+    for _ in 0..(a.min(b)) {
+        match rotate_a {
+            Rotates::Forward(_) => rr(state),
+            Rotates::Reverse(_) => rrr(state),
+        }
     }
-    if (state.b == comb![2, 1, 3]/* bac */) {
-        rb(state);
-        //SWAP
-        rb(state);
+
+    if a < b {
+        for _ in 0..(b - a) {
+            match rotate_a {
+                Rotates::Forward(_) => rb(state),
+                Rotates::Reverse(_) => rrb(state),
+            }
+        }
+    } else {
+        for _ in 0..(a - b) {
+            match rotate_a {
+                Rotates::Forward(_) => ra(state),
+                Rotates::Reverse(_) => rra(state),
+            }
+        }
     }
-    if (state.b == comb![3, 2, 1]/* cba */) {
-        //SWAP
-        rb(state);
+    pb(state);
+    if let Some(e) = state.sorted.iter_mut().find(|(e, _)| *e == state.b[0]) {
+        e.1 = true;
     }
-    if (state.b == comb![3, 1, 2]/* cab */) {
-        rrb(state);
+
+    //target(
+    //    0,
+    //    state.b.iter().position_min().unwrap_or_default(),
+    //    state.b.len(),
+    //)
+    //.action(state, StackSelector::B)
+}
+
+fn find_best_rotate_for_item(
+    index: usize,
+    state: &State,
+    pop_from: StackSelector,
+    min_zero_pos: bool,
+) -> (Rotates, Rotates) {
+    macro_rules! stack {
+        (main) => {
+            match pop_from {
+                StackSelector::A => &state.a,
+                StackSelector::B => &state.b,
+            }
+        };
+        (inv) => {
+            match pop_from {
+                StackSelector::B => &state.a,
+                StackSelector::A => &state.b,
+            }
+        };
     }
+    let find_func = match min_zero_pos {
+        false => itertools::Itertools::position_max,
+        true => itertools::Itertools::position_min,
+    };
+
+    let target_index = (find_place(stack!(main)[index], state)
+        + (stack!(inv).len() - find_func(stack!(inv).iter()).unwrap_or(0)))
+        % stack!(inv).len();
+    let mut rotate_main = target(0, index, stack!(main).len());
+    let mut rotate_inv = target(target_index, 0, stack!(inv).len());
+
+    if (std::mem::discriminant(&rotate_main) != std::mem::discriminant(&rotate_inv)) {
+        let diff_flip_main = {
+            let (Rotates::Forward(main) | Rotates::Reverse(main)) =
+                rotate_main.flip(stack!(main).len());
+            let (Rotates::Forward(inv) | Rotates::Reverse(inv)) = rotate_inv;
+            main.abs_diff(inv)
+        };
+        let diff_flip_inv = {
+            let (Rotates::Forward(main) | Rotates::Reverse(main)) = rotate_main;
+            let (Rotates::Forward(inv) | Rotates::Reverse(inv)) =
+                rotate_inv.flip(stack!(inv).len());
+            main.abs_diff(inv)
+        };
+        if (diff_flip_main > diff_flip_inv) {
+            rotate_inv = rotate_inv.flip(stack!(inv).len());
+        } else {
+            rotate_main = rotate_main.flip(stack!(main).len());
+        }
+    }
+
+    (rotate_main, rotate_inv)
 }
 
 fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()> {
@@ -516,59 +621,32 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
     pb(&mut state);
     pb(&mut state);
     pb(&mut state);
-    if let Some(e) = state.sorted.iter_mut().find(|(e, _)| *e == state.b[0]) {
-        e.1 = true;
+    for item in &state.b {
+        if let Some(e) = state.sorted.iter_mut().find(|(e, _)| e == item) {
+            e.1 = true;
+        }
     }
-    if let Some(e) = state.sorted.iter_mut().find(|(e, _)| *e == state.b[1]) {
-        e.1 = true;
-    }
-    if let Some(e) = state.sorted.iter_mut().find(|(e, _)| *e == state.b[2]) {
-        e.1 = true;
-    }
-    sort_three_b(&mut state);
+    sort_three(&mut state, StackSelector::B, false);
+    //dbg!(&state.b);
     // if state.b[0] < state.b[1] {
     //     rb(&mut state);
     // }
     // end of init
-
     // sorting
-    while state.a.len() > 1 {
+    while state.a.len() > 3 {
         let best_move = state
             .a
             .iter()
             .enumerate()
             .map(|(index, &elem)| {
                 (index, {
-                    let mut out = 1;
-                    let target_index = (find_place(state.a[index], &state)
-                        + (state.b.len() - state.b.iter().position_max().unwrap_or(0)))
-                        % state.b.len();
-                    let mut rotate_a = target(0, index, state.a.len());
-                    let mut rotate_b = target(target_index, 0, state.b.len());
-
-                    if (std::mem::discriminant(&rotate_a) != std::mem::discriminant(&rotate_b)) {
-                        let diff_flip_a = {
-                            let (Rotates::Forward(a) | Rotates::Reverse(a)) =
-                                rotate_a.flip(state.a.len());
-                            let (Rotates::Forward(b) | Rotates::Reverse(b)) = rotate_b; //.flip(state.a.len());
-                            a.abs_diff(b)
-                        };
-                        let diff_flip_b = {
-                            let (Rotates::Forward(a) | Rotates::Reverse(a)) = rotate_a; // .flip(state.a.len());
-                            let (Rotates::Forward(b) | Rotates::Reverse(b)) =
-                                rotate_b.flip(state.b.len());
-                            a.abs_diff(b)
-                        };
-                        if (diff_flip_a > diff_flip_b) {
-                            rotate_b = rotate_b.flip(state.b.len());
-                        } else {
-                            rotate_a = rotate_a.flip(state.a.len());
-                        }
-                    }
+                    let mut out = 0;
+                    let (rotate_a, rotate_b) =
+                        find_best_rotate_for_item(index, &state, StackSelector::A, false);
 
                     let (Rotates::Forward(a) | Rotates::Reverse(a)) = rotate_a; // .flip(state.a.len());
                     let (Rotates::Forward(b) | Rotates::Reverse(b)) = rotate_b;
-                    for _ in 0..a.min(b) {
+                    for _ in 0..(a.min(b)) {
                         out += 1;
                     }
                     if a < b {
@@ -587,6 +665,8 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
         do_move(&mut state, best_move.map(|t| t.0).unwrap_or_default());
     }
 
+    //println!("before merging: {}", state.counts);
+    sort_three(&mut state, StackSelector::A, true);
     //let index = find_place(state.a[0], &state);
 
     // end of sorting
@@ -596,27 +676,116 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
         state.b.len(),
     )
     .action(&mut state, StackSelector::B);
-    let back = *state.a.back().unwrap();
-    let mut s = true;
-    while !state.b.is_empty() {
-        if s && &back > state.b.front().unwrap() {
-            ra(&mut state);
-            s = false;
+
+    state.sorted.make_contiguous().reverse();
+    state.sorted.iter_mut().for_each(|t| t.1 = false);
+
+    for item in &state.a {
+        if let Some(e) = state.sorted.iter_mut().find(|(e, _)| e == item) {
+            e.1 = true;
         }
-        pa(&mut state);
     }
 
-    target(
+    //dbg!(&state.a);
+    //dbg!(&state.b);
+    while !state.b.is_empty() {
+        //println!("=================");
+        //target(
+        //    0,
+        //    state.a.iter().position_min().unwrap_or_default(),
+        //    state.a.len(),
+        //)
+        //.action(&mut state, StackSelector::A);
+        let idx = (0..(state.b.len()))
+            .map(|index| {
+                let mut out = 0;
+                let (rotate_a, rotate_b) =
+                    find_best_rotate_for_item(index, &state, StackSelector::B, true);
+
+                let (Rotates::Forward(a) | Rotates::Reverse(a)) = rotate_a;
+                let (Rotates::Forward(b) | Rotates::Reverse(b)) = rotate_b;
+                for _ in 0..(a.min(b)) {
+                    out += 1;
+                }
+                if a < b {
+                    for _ in 0..(b - a) {
+                        out += 1;
+                    }
+                } else {
+                    for _ in 0..(a - b) {
+                        out += 1;
+                    }
+                }
+                out
+            })
+            .position_min()
+            .unwrap_or(0);
+        let (rotation_b, rotation_a) =
+            find_best_rotate_for_item(idx, &state, StackSelector::B, true);
+
+        let (Rotates::Forward(a) | Rotates::Reverse(a)) = rotation_a;
+        let (Rotates::Forward(b) | Rotates::Reverse(b)) = rotation_b;
+
+        for _ in 0..(a.min(b)) {
+            match rotation_a {
+                Rotates::Forward(_) => rr(&mut state),
+                Rotates::Reverse(_) => rrr(&mut state),
+            }
+        }
+        if a < b {
+            for _ in 0..(b - a) {
+                match rotation_a {
+                    Rotates::Forward(_) => rb(&mut state),
+                    Rotates::Reverse(_) => rrb(&mut state),
+                }
+            }
+        } else {
+            for _ in 0..(a - b) {
+                match rotation_a {
+                    Rotates::Forward(_) => ra(&mut state),
+                    Rotates::Reverse(_) => rra(&mut state),
+                }
+            }
+        }
+
+        pa(&mut state);
+        for item in &state.a {
+            if let Some(e) = state.sorted.iter_mut().find(|(e, _)| e == item) {
+                e.1 = true;
+            }
+        }
+    }
+
+    /*let back = *state.a.back().unwrap();
+        let mut s = true;
+        while !state.b.is_empty() {
+            if s && &back > state.b.front().unwrap() {
+                ra(&mut state);
+                s = false;
+            }
+            pa(&mut state);
+        }
+    */
+    let mut rotation = target(
         0,
         state.a.iter().position_min().unwrap_or_default(),
         state.a.len(),
-    )
-    .action(&mut state, StackSelector::A);
+    );
+
+    if false {
+        let (Rotates::Forward(normal) | Rotates::Reverse(normal)) = rotation;
+        let (Rotates::Forward(flipped) | Rotates::Reverse(flipped)) = rotation.flip(state.a.len());
+        if (normal > flipped) {
+            rotation = rotation.flip(state.a.len());
+        }
+    }
+
+    rotation.action(&mut state, StackSelector::A);
     // everything should be in the correct place !
     if is_sorted(state.a.iter()) {
         Ok((state.counts, optimize_moves(&mut state, state_cpy)))
     } else {
-        println!("{back}");
+        //println!("{back}");
         dbg!(&state.a);
         Err(())
     }
