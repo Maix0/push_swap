@@ -118,140 +118,99 @@ impl Rotates {
     }
 }
 
+fn count_following<Item: Copy + PartialEq + Eq, Iter: Iterator<Item = Item>>(
+    mut iter: Iter,
+) -> Vec<(Item, usize)> {
+    let first = iter.next();
+    let mut out = Vec::new();
+    if let Some(e) = first {
+        out.push((e, 1));
+    }
+    for e in iter {
+        let last = out.last_mut().unwrap();
+        if last.0 == e {
+            last.1 += 1;
+        } else {
+            out.push((e, 1));
+        }
+    }
+    out
+}
+
 fn optimize_moves(state: &mut State, mut cpy: State) -> usize {
-    let mut start_index = 0;
-    let mut current_len = 0;
-    let mut optimized = Vec::new();
-    //println!("{:?}", &state.moves);
-    optimized = state.moves.clone();
-    /*while start_index + current_len < state.moves.len() {
-        match state.moves[start_index + current_len] {
-            Move::RotateA
-            | Move::RotateB
-            | Move::RotateBoth
-            | Move::RevRotateA
-            | Move::RevRotateB
-            | Move::RevRotateBoth => {
-                current_len += 1;
+    let mut output = count_following(state.moves.iter().copied()).into_iter();
+    let mut o = Vec::<(Move, usize)>::new();
+    while let Some(m) = output.next() {
+        match m.0 {
+            Move::PushA | Move::PushB | Move::SwapA | Move::SwapB | Move::SwapBoth => {
+                o.push(m);
             }
-            m @ (Move::PushB | Move::PushA) => {
-                if current_len != 0 {
-                    println!("{:?}", &state.moves[start_index..][..current_len]);
-                    optimize_moves_span(&state.moves[start_index..][..current_len], &mut optimized);
-                    start_index += current_len;
-                    current_len = 0;
+            Move::RotateBoth | Move::RevRotateBoth => {
+                let count = std::iter::once(m).chain(
+                    (&mut output)
+                        .take_while_ref(|e| matches!(e.0, Move::RotateBoth | Move::RevRotateBoth))
+                        .collect::<Vec<_>>(),
+                );
+                let mut tot = 0_isize;
+                for (ty, c) in count {
+                    tot += c as isize
+                        * (match ty {
+                            Move::RotateA | Move::RotateB | Move::RotateBoth => 1,
+                            Move::RevRotateA | Move::RevRotateB | Move::RevRotateBoth => -1,
+                            _ => 0,
+                        })
                 }
-                start_index += 1;
-                optimized.push(m);
+                if tot < 0 {
+                    o.push((Move::RevRotateBoth, tot.unsigned_abs()))
+                } else {
+                    o.push((Move::RotateBoth, tot.unsigned_abs()))
+                }
             }
-        }
-    }
-    if current_len != 0 {
-        optimize_moves_span(&state.moves[start_index..], &mut optimized);
-    }*/
-    for m in &state.moves {
-        match *m {
-            Move::PushA => pa(&mut cpy),
-            Move::PushB => pb(&mut cpy),
-            Move::RotateA => ra(&mut cpy),
-            Move::RotateB => rb(&mut cpy),
-            Move::RotateBoth => rr(&mut cpy),
-            Move::RevRotateA => rra(&mut cpy),
-            Move::RevRotateB => rrb(&mut cpy),
-            Move::RevRotateBoth => rrr(&mut cpy),
-            Move::SwapA => sa(&mut cpy),
-            Move::SwapB => sb(&mut cpy),
-            Move::SwapBoth => ss(&mut cpy),
-        }
-    }
-    if is_sorted(cpy.a.iter()) {
-        cpy.counts
-    } else {
-        //println!("failed...");
-        //println!("{:?}", cpy.a);
-        0
-    }
-}
-
-fn optimize_moves_span(mut span: &[Move], output: &mut Vec<Move>) {
-    while !span.is_empty() {
-        let first = span.first().unwrap();
-        let position = span
-            .iter()
-            .find_position(|s| *s != first)
-            .map(|v| (v.0, *v.1))
-            .unwrap_or_else(|| (span.len() - 1, *first));
-        match (*first, position.1) {
-            (Move::RotateA, Move::RotateB)
-            | (Move::RotateB, Move::RotateA)
-            | (Move::RevRotateA, Move::RevRotateB)
-            | (Move::RevRotateB, Move::RevRotateA) => {
-                let (to_process, next) = span.split_at(position.0 + 1);
-                span = next;
-                optimize_moves_span_inner(to_process, output);
-                println!("POMME");
-                //println!("{to_process:?}");
+            Move::RotateA | Move::RevRotateA => {
+                let count = std::iter::once(m).chain(
+                    (&mut output)
+                        .take_while_ref(|e| matches!(e.0, Move::RotateA | Move::RevRotateA))
+                        .collect::<Vec<_>>(),
+                );
+                let mut tot = 0_isize;
+                for (ty, c) in count {
+                    tot += c as isize
+                        * (match ty {
+                            Move::RotateA | Move::RotateB | Move::RotateBoth => 1,
+                            Move::RevRotateA | Move::RevRotateB | Move::RevRotateBoth => -1,
+                            _ => 0,
+                        })
+                }
+                if tot < 0 {
+                    o.push((Move::RevRotateA, tot.unsigned_abs()))
+                } else {
+                    o.push((Move::RotateA, tot.unsigned_abs()))
+                }
             }
-            _ => {
-                let (to_process, next) = span.split_at(position.0 + 1);
-                span = next;
-                output.extend_from_slice(to_process);
+            Move::RotateB | Move::RevRotateB => {
+                let count = std::iter::once(m).chain(
+                    (&mut output)
+                        .take_while_ref(|e| matches!(e.0, Move::RotateB | Move::RevRotateB))
+                        .collect::<Vec<_>>(),
+                );
+                let mut tot = 0_isize;
+                for (ty, c) in count {
+                    tot += c as isize
+                        * (match ty {
+                            Move::RotateA | Move::RotateB | Move::RotateBoth => 1,
+                            Move::RevRotateA | Move::RevRotateB | Move::RevRotateBoth => -1,
+                            _ => 0,
+                        })
+                }
+                if tot < 0 {
+                    o.push((Move::RevRotateB, tot.unsigned_abs()))
+                } else {
+                    o.push((Move::RotateB, tot.unsigned_abs()))
+                }
             }
         }
     }
-}
-
-fn optimize_moves_span_inner(span: &[Move], output: &mut Vec<Move>) {
-    let ra = span.iter().filter(|m| matches!(m, Move::RotateA)).count();
-    let rra = span
-        .iter()
-        .filter(|m| matches!(m, Move::RevRotateA))
-        .count();
-    let rb = span.iter().filter(|m| matches!(m, Move::RotateB)).count();
-    let rrb = span
-        .iter()
-        .filter(|m| matches!(m, Move::RevRotateB))
-        .count();
-
-    match ((ra, rb), (rra, rrb)) {
-        ((0, 0), (a, b)) => {
-            if a > b {
-                for _ in 0..b {
-                    output.push(Move::RotateBoth);
-                }
-                for _ in b..a {
-                    output.push(Move::RotateA);
-                }
-            } else {
-                for _ in 0..a {
-                    output.push(Move::RotateBoth);
-                }
-                for _ in a..b {
-                    output.push(Move::RotateB);
-                }
-            }
-        }
-        ((a, b), (0, 0)) => {
-            if a > b {
-                for _ in 0..b {
-                    output.push(Move::RevRotateBoth);
-                }
-                for _ in b..a {
-                    output.push(Move::RevRotateA);
-                }
-            } else {
-                for _ in 0..a {
-                    output.push(Move::RevRotateBoth);
-                }
-                for _ in a..b {
-                    output.push(Move::RevRotateB);
-                }
-            }
-        }
-        _ => {
-            output.extend_from_slice(span);
-        }
-    }
+    o.iter().map(|s| s.1).sum::<usize>()
 }
 
 fn is_sorted<I>(data: I) -> bool
@@ -310,17 +269,16 @@ fn main() {
         let target = match iter_size {
             500 => 5500f64,
             100 => 700f64,
-            _ => return,
+            _ => 0f64,
         };
         let over_target = data.iter().filter(|d| **d >= target).count();
         println!(
-            "{} ({:02.1}) runs are over the target of {}",
+            "{} ({:02.1}%) runs are over the target of {}",
             over_target,
             over_target as f64 / iter_numbers as f64 * 100.0,
             target as usize
         );
 
-        return;
         let data = Data::new(
             results
                 .iter()
@@ -336,6 +294,13 @@ fn main() {
         println!("StdDev \t=> {}", data.std_dev().unwrap());
         println!("Min    \t=> {}", data.min());
         println!("Max    \t=> {}", data.max());
+        let over_target = data.iter().filter(|d| **d >= target).count();
+        println!(
+            "{} ({:02.1}%) runs are over the target of {}",
+            over_target,
+            over_target as f64 / iter_numbers as f64 * 100.0,
+            target as usize
+        );
     }
 }
 
@@ -587,7 +552,7 @@ fn run_func_with_best_rotate_for_item<
 
     let target_index = (find_place(stack!(main)[index], state)
         + (stack!(inv).len() - find_func(stack!(inv).iter()).unwrap_or(0)))
-        % stack!(inv).len();
+        % stack!(inv).len().max(1);
     let mut rotate_main = target(0, index, stack!(main).len());
     let mut rotate_inv = target(target_index, 0, stack!(inv).len());
 
@@ -706,7 +671,9 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
         .make_contiguous()
         .sort_unstable_by_key(|(e, _)| *e);
     state.sorted.make_contiguous();
-
+    while (state.a.len() > 2 && is_sorted(&state.a)) {
+        state.a.make_contiguous().shuffle(&mut thread_rng());
+    }
     // init
     pb(&mut state);
     pb(&mut state);
