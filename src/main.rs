@@ -2,6 +2,7 @@
 #![allow(unused)]
 use std::{
     collections::{vec_deque::VecDeque, HashSet},
+    marker::PhantomData,
     ops::Add,
 };
 
@@ -306,6 +307,19 @@ fn main() {
         println!("StdDev \t=> {}", data.std_dev().unwrap());
         println!("Min    \t=> {}", data.min());
         println!("Max    \t=> {}", data.max());
+        let target = match iter_size {
+            500 => 5500f64,
+            100 => 700f64,
+            _ => return,
+        };
+        let over_target = data.iter().filter(|d| **d >= target).count();
+        println!(
+            "{} ({:02.1}) runs are over the target of {}",
+            over_target,
+            over_target as f64 / iter_numbers as f64 * 100.0,
+            target as usize
+        );
+
         return;
         let data = Data::new(
             results
@@ -503,33 +517,27 @@ fn sort_three(state: &mut State, selector: StackSelector, min_first: bool) {
     }
 }
 
+fn fuck_mut<'a, 'b, T>(r: &'a mut T) -> &'b mut T {
+    unsafe { std::mem::transmute(r) }
+}
+
 fn do_move(state: &mut State, index: usize) {
-    let (rotate_a, rotate_b) = find_best_rotate_for_item(index, state, StackSelector::A, false);
+    run_func_with_best_rotate_for_item(
+        index,
+        fuck_mut(state),
+        StackSelector::A,
+        false,
+        RotationData {
+            args: fuck_mut(state),
+            main_forward: |s| ra(*s),
+            main_reverse: |s| rra(*s),
+            dual_forward: |s| rr(*s),
+            dual_reverse: |s| rrr(*s),
+            other_forward: |s| rb(*s),
+            other_reverse: |s| rrb(*s),
+        },
+    );
 
-    let (Rotates::Forward(a) | Rotates::Reverse(a)) = rotate_a; // .flip(state.a.len());
-    let (Rotates::Forward(b) | Rotates::Reverse(b)) = rotate_b;
-    for _ in 0..(a.min(b)) {
-        match rotate_a {
-            Rotates::Forward(_) => rr(state),
-            Rotates::Reverse(_) => rrr(state),
-        }
-    }
-
-    if a < b {
-        for _ in 0..(b - a) {
-            match rotate_a {
-                Rotates::Forward(_) => rb(state),
-                Rotates::Reverse(_) => rrb(state),
-            }
-        }
-    } else {
-        for _ in 0..(a - b) {
-            match rotate_a {
-                Rotates::Forward(_) => ra(state),
-                Rotates::Reverse(_) => rra(state),
-            }
-        }
-    }
     pb(state);
     if let Some(e) = state.sorted.iter_mut().find(|(e, _)| *e == state.b[0]) {
         e.1 = true;
@@ -543,12 +551,21 @@ fn do_move(state: &mut State, index: usize) {
     //.action(state, StackSelector::B)
 }
 
-fn find_best_rotate_for_item(
+fn run_func_with_best_rotate_for_item<
+    Args,
+    F1: Fn(&mut Args),
+    F2: Fn(&mut Args),
+    F3: Fn(&mut Args),
+    F4: Fn(&mut Args),
+    F5: Fn(&mut Args),
+    F6: Fn(&mut Args),
+>(
     index: usize,
     state: &State,
     pop_from: StackSelector,
     min_zero_pos: bool,
-) -> (Rotates, Rotates) {
+    mut data: RotationData<Args, F1, F2, F3, F4, F5, F6>,
+) {
     macro_rules! stack {
         (main) => {
             match pop_from {
@@ -574,6 +591,27 @@ fn find_best_rotate_for_item(
     let mut rotate_main = target(0, index, stack!(main).len());
     let mut rotate_inv = target(target_index, 0, stack!(inv).len());
 
+    macro_rules! choose_rot {
+        (main) => {
+            |s| match rotate_main {
+                Rotates::Forward(_) => (data.main_forward)(s),
+                Rotates::Reverse(_) => (data.main_reverse)(s),
+            }
+        };
+        (both) => {
+            |s| match rotate_main {
+                Rotates::Forward(_) => (data.dual_forward)(s),
+                Rotates::Reverse(_) => (data.dual_reverse)(s),
+            }
+        };
+        (inv) => {
+            |s| match rotate_inv {
+                Rotates::Forward(_) => (data.other_forward)(s),
+                Rotates::Reverse(_) => (data.other_reverse)(s),
+            }
+        };
+    }
+
     if (std::mem::discriminant(&rotate_main) != std::mem::discriminant(&rotate_inv)) {
         let diff_flip_main = {
             let (Rotates::Forward(main) | Rotates::Reverse(main)) =
@@ -587,14 +625,66 @@ fn find_best_rotate_for_item(
                 rotate_inv.flip(stack!(inv).len());
             main.abs_diff(inv)
         };
-        if (diff_flip_main > diff_flip_inv) {
-            rotate_inv = rotate_inv.flip(stack!(inv).len());
-        } else {
-            rotate_main = rotate_main.flip(stack!(main).len());
+        let diff_no_flip = {
+            let (Rotates::Forward(main) | Rotates::Reverse(main)) = rotate_main;
+            let (Rotates::Forward(inv) | Rotates::Reverse(inv)) = rotate_inv;
+            main + inv
+        };
+        match diff_no_flip.min(diff_flip_inv).min(diff_flip_main) {
+            n if n == diff_no_flip => {}
+            n if n == diff_flip_main => {
+                rotate_main = rotate_main.flip(stack!(main).len());
+            }
+            n if n == diff_flip_inv => {
+                rotate_inv = rotate_inv.flip(stack!(inv).len());
+            }
+            _ => {}
         }
     }
+    if std::mem::discriminant(&rotate_main) == std::mem::discriminant(&rotate_inv) {
+        let (Rotates::Forward(main) | Rotates::Reverse(main)) = rotate_main;
+        let (Rotates::Forward(inv) | Rotates::Reverse(inv)) = rotate_inv;
 
-    (rotate_main, rotate_inv)
+        for _ in 0..(main.min(inv)) {
+            choose_rot!(both)(&mut data.args);
+        }
+        if main > inv {
+            for _ in 0..(main - inv) {
+                choose_rot!(main)(&mut data.args);
+            }
+        } else {
+            for _ in 0..(inv - main) {
+                choose_rot!(inv)(&mut data.args);
+            }
+        }
+    } else {
+        let (Rotates::Forward(main) | Rotates::Reverse(main)) = rotate_main;
+        let (Rotates::Forward(inv) | Rotates::Reverse(inv)) = rotate_inv;
+        for _ in 0..main {
+            choose_rot!(main)(&mut data.args);
+        }
+        for _ in 0..inv {
+            choose_rot!(inv)(&mut data.args);
+        }
+    }
+}
+
+struct RotationData<
+    Args,
+    F1: Fn(&mut Args),
+    F2: Fn(&mut Args),
+    F3: Fn(&mut Args),
+    F4: Fn(&mut Args),
+    F5: Fn(&mut Args),
+    F6: Fn(&mut Args),
+> {
+    args: Args,
+    dual_forward: F1,
+    dual_reverse: F2,
+    main_forward: F3,
+    main_reverse: F4,
+    other_forward: F5,
+    other_reverse: F6,
 }
 
 fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()> {
@@ -633,36 +723,33 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
     // }
     // end of init
     // sorting
+    //println!("before_sorting");
     while state.a.len() > 3 {
-        let best_move = state
-            .a
-            .iter()
-            .enumerate()
-            .map(|(index, &elem)| {
-                (index, {
-                    let mut out = 0;
-                    let (rotate_a, rotate_b) =
-                        find_best_rotate_for_item(index, &state, StackSelector::A, false);
-
-                    let (Rotates::Forward(a) | Rotates::Reverse(a)) = rotate_a; // .flip(state.a.len());
-                    let (Rotates::Forward(b) | Rotates::Reverse(b)) = rotate_b;
-                    for _ in 0..(a.min(b)) {
-                        out += 1;
-                    }
-                    if a < b {
-                        for _ in 0..(b - a) {
-                            out += 1;
-                        }
-                    } else {
-                        for _ in 0..(a - b) {
-                            out += 1;
-                        }
-                    }
-                    out
-                })
+        let best_move = (0..(state.a.len()))
+            .map(|index| {
+                let mut out = 0;
+                let func = |i: &mut &mut i32| {
+                    **i += 1;
+                };
+                run_func_with_best_rotate_for_item(
+                    index,
+                    &state,
+                    StackSelector::A,
+                    false,
+                    RotationData {
+                        args: &mut out,
+                        main_forward: func,
+                        main_reverse: func,
+                        dual_forward: func,
+                        dual_reverse: func,
+                        other_forward: func,
+                        other_reverse: func,
+                    },
+                );
+                out
             })
-            .min_by_key(|(_, i)| *i);
-        do_move(&mut state, best_move.map(|t| t.0).unwrap_or_default());
+            .position_min();
+        do_move(&mut state, best_move.unwrap_or(0));
     }
 
     //println!("before merging: {}", state.counts);
@@ -685,7 +772,6 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
             e.1 = true;
         }
     }
-
     //dbg!(&state.a);
     //dbg!(&state.b);
     while !state.b.is_empty() {
@@ -696,58 +782,48 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
         //    state.a.len(),
         //)
         //.action(&mut state, StackSelector::A);
+        //println!("yaaas");
         let idx = (0..(state.b.len()))
             .map(|index| {
                 let mut out = 0;
-                let (rotate_a, rotate_b) =
-                    find_best_rotate_for_item(index, &state, StackSelector::B, true);
-
-                let (Rotates::Forward(a) | Rotates::Reverse(a)) = rotate_a;
-                let (Rotates::Forward(b) | Rotates::Reverse(b)) = rotate_b;
-                for _ in 0..(a.min(b)) {
-                    out += 1;
-                }
-                if a < b {
-                    for _ in 0..(b - a) {
-                        out += 1;
-                    }
-                } else {
-                    for _ in 0..(a - b) {
-                        out += 1;
-                    }
-                }
+                let func = |i: &mut &mut i32| {
+                    **i += 1;
+                };
+                run_func_with_best_rotate_for_item(
+                    index,
+                    &state,
+                    StackSelector::B,
+                    true,
+                    RotationData {
+                        args: &mut out,
+                        main_forward: func,
+                        main_reverse: func,
+                        dual_forward: func,
+                        dual_reverse: func,
+                        other_forward: func,
+                        other_reverse: func,
+                    },
+                );
                 out
+                //find_best_rotate_for_item(index, &state, StackSelector::B, true);
             })
             .position_min()
             .unwrap_or(0);
-        let (rotation_b, rotation_a) =
-            find_best_rotate_for_item(idx, &state, StackSelector::B, true);
-
-        let (Rotates::Forward(a) | Rotates::Reverse(a)) = rotation_a;
-        let (Rotates::Forward(b) | Rotates::Reverse(b)) = rotation_b;
-
-        for _ in 0..(a.min(b)) {
-            match rotation_a {
-                Rotates::Forward(_) => rr(&mut state),
-                Rotates::Reverse(_) => rrr(&mut state),
-            }
-        }
-        if a < b {
-            for _ in 0..(b - a) {
-                match rotation_a {
-                    Rotates::Forward(_) => rb(&mut state),
-                    Rotates::Reverse(_) => rrb(&mut state),
-                }
-            }
-        } else {
-            for _ in 0..(a - b) {
-                match rotation_a {
-                    Rotates::Forward(_) => ra(&mut state),
-                    Rotates::Reverse(_) => rra(&mut state),
-                }
-            }
-        }
-
+        run_func_with_best_rotate_for_item(
+            idx,
+            fuck_mut(&mut state),
+            StackSelector::B,
+            true,
+            RotationData {
+                args: fuck_mut(&mut state),
+                main_forward: |s| rb(s),
+                main_reverse: |s| rrb(s),
+                dual_forward: |s| rr(s),
+                dual_reverse: |s| rrr(s),
+                other_forward: |s| ra(s),
+                other_reverse: |s| rra(s),
+            },
+        );
         pa(&mut state);
         for item in &state.a {
             if let Some(e) = state.sorted.iter_mut().find(|(e, _)| e == item) {
@@ -755,6 +831,7 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
             }
         }
     }
+    //println!("after_sorting");
 
     /*let back = *state.a.back().unwrap();
         let mut s = true;
@@ -772,7 +849,7 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
         state.a.len(),
     );
 
-    if false {
+    if true {
         let (Rotates::Forward(normal) | Rotates::Reverse(normal)) = rotation;
         let (Rotates::Forward(flipped) | Rotates::Reverse(flipped)) = rotation.flip(state.a.len());
         if (normal > flipped) {
