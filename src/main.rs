@@ -304,7 +304,7 @@ fn main() {
     }
 }
 
-const PRINT_ACTIONS: bool = true;
+const PRINT_ACTIONS: bool = false;
 
 macro_rules! print_action {
     ($state:expr, $($t:tt)*) => {
@@ -661,7 +661,7 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
         counts: 0,
         moves: Vec::new(),
     };
-    println!("{:?}", state.a);
+    //println!("{:?}", state.a);
 
     let state_cpy = state.clone();
 
