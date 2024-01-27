@@ -103,12 +103,12 @@ impl Rotates {
     fn action(&self, state: &mut State, stack: StackSelector) {
         let mut func = match self {
             Self::Forward(_) => match stack {
-                StackSelector::A => ra,
-                StackSelector::B => rb,
-            },
-            Self::Reverse(_) => match stack {
                 StackSelector::A => rra,
                 StackSelector::B => rrb,
+            },
+            Self::Reverse(_) => match stack {
+                StackSelector::A => ra,
+                StackSelector::B => rb,
             },
         };
         let (Self::Forward(n) | Self::Reverse(n)) = *self;
@@ -304,56 +304,56 @@ fn main() {
     }
 }
 
-const PRINT_ACTIONS: bool = false;
+const PRINT_ACTIONS: bool = true;
 
 macro_rules! print_action {
     ($state:expr, $($t:tt)*) => {
         if PRINT_ACTIONS {
-            let writer: &mut dyn std::io::Write = &mut std::io::stdout();
-            write!(writer, $($t)*).unwrap();
+            let writer: &mut dyn std::io::Write = &mut std::io::stderr();
+            writeln!(writer, $($t)*).unwrap();
         }
     };
 }
 fn ra(state: &mut State) {
-    state.a.rotate_right(1);
-    print_action!(state, "RA");
+    state.a.rotate_left(1);
+    print_action!(state, "ra");
     state.counts += 1;
     state.moves.push(Move::RotateA)
 }
 
 fn rb(state: &mut State) {
-    state.b.rotate_right(1);
-    print_action!(state, "RB");
+    state.b.rotate_left(1);
+    print_action!(state, "rb");
     state.counts += 1;
     state.moves.push(Move::RotateA)
 }
 
 fn rr(state: &mut State) {
-    state.a.rotate_right(1);
-    state.b.rotate_right(1);
-    print_action!(state, "RR");
+    state.a.rotate_left(1);
+    state.b.rotate_left(1);
+    print_action!(state, "rr");
     state.counts += 1;
     state.moves.push(Move::RotateBoth)
 }
 
 fn rra(state: &mut State) {
-    state.a.rotate_left(1);
-    print_action!(state, "RRA");
+    state.a.rotate_right(1);
+    print_action!(state, "rra");
     state.counts += 1;
     state.moves.push(Move::RevRotateA)
 }
 
 fn rrb(state: &mut State) {
-    state.b.rotate_left(1);
-    print_action!(state, "RRB");
+    state.b.rotate_right(1);
+    print_action!(state, "rrb");
     state.counts += 1;
     state.moves.push(Move::RevRotateB)
 }
 
 fn rrr(state: &mut State) {
-    state.a.rotate_left(1);
-    state.b.rotate_left(1);
-    print_action!(state, "RRR");
+    state.a.rotate_right(1);
+    state.b.rotate_right(1);
+    print_action!(state, "rrr");
     state.counts += 1;
     state.moves.push(Move::RevRotateBoth)
 }
@@ -362,7 +362,7 @@ fn pa(state: &mut State) {
     if let Some(e) = state.b.pop_front() {
         state.a.push_front(e);
     }
-    print_action!(state, "PA");
+    print_action!(state, "pa");
     state.counts += 1;
     state.moves.push(Move::PushA)
 }
@@ -371,7 +371,7 @@ fn pb(state: &mut State) {
     if let Some(e) = state.a.pop_front() {
         state.b.push_front(e);
     }
-    print_action!(state, "PB");
+    print_action!(state, "pb");
     state.counts += 1;
     state.moves.push(Move::PushB)
 }
@@ -385,7 +385,7 @@ fn sa(state: &mut State) {
     if let Some(e) = fir {
         state.a.push_front(e);
     }
-    print_action!(state, "SA");
+    print_action!(state, "sa");
     state.counts += 1;
     state.moves.push(Move::SwapA)
 }
@@ -399,7 +399,7 @@ fn sb(state: &mut State) {
     if let Some(e) = fir {
         state.b.push_front(e);
     }
-    print_action!(state, "SB");
+    print_action!(state, "sb");
     state.counts += 1;
     state.moves.push(Move::SwapB)
 }
@@ -420,7 +420,7 @@ fn ss(state: &mut State) {
     if let Some(e) = fir {
         state.a.push_front(e);
     }
-    print_action!(state, "SS");
+    print_action!(state, "ss");
     state.counts += 1;
     state.moves.push(Move::SwapBoth)
 }
@@ -467,18 +467,18 @@ fn sort_three(state: &mut State, selector: StackSelector, min_first: bool) {
 
     if (stack!() == comb![1, 2, 3]/* abc */) {
         swap(state);
-        rotate(state);
-    } else if (stack!() == comb![1, 3, 2]/* acb */) {
         rev_rotate(state);
+    } else if (stack!() == comb![1, 3, 2]/* acb */) {
+        rotate(state);
     } else if (stack!() == comb![2, 3, 1]/* bca */) {
         swap(state);
     } else if (stack!() == comb![2, 1, 3]/* bac */) {
-        rev_rotate(state);
+        rotate(state);
     } else if (stack!() == comb![3, 2, 1]/* cba */) {
     } else if (stack!() == comb![3, 1, 2]/* cab */) {
-        rev_rotate(state);
-        swap(state);
         rotate(state);
+        swap(state);
+        rev_rotate(state);
     }
 }
 
@@ -494,12 +494,12 @@ fn do_move(state: &mut State, index: usize) {
         false,
         RotationData {
             args: fuck_mut(state),
-            main_forward: |s| ra(*s),
-            main_reverse: |s| rra(*s),
-            dual_forward: |s| rr(*s),
-            dual_reverse: |s| rrr(*s),
-            other_forward: |s| rb(*s),
-            other_reverse: |s| rrb(*s),
+            main_forward: |s| rra(*s),
+            main_reverse: |s| ra(*s),
+            dual_forward: |s| rrr(*s),
+            dual_reverse: |s| rr(*s),
+            other_forward: |s| rrb(*s),
+            other_reverse: |s| rb(*s),
         },
     );
 
@@ -661,6 +661,7 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
         counts: 0,
         moves: Vec::new(),
     };
+    println!("{:?}", state.a);
 
     let state_cpy = state.clone();
 
@@ -783,12 +784,12 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
             true,
             RotationData {
                 args: fuck_mut(&mut state),
-                main_forward: |s| rb(s),
-                main_reverse: |s| rrb(s),
-                dual_forward: |s| rr(s),
-                dual_reverse: |s| rrr(s),
-                other_forward: |s| ra(s),
-                other_reverse: |s| rra(s),
+                main_forward: |s| rrb(s),
+                main_reverse: |s| rb(s),
+                dual_forward: |s| rrr(s),
+                dual_reverse: |s| rr(s),
+                other_forward: |s| rra(s),
+                other_reverse: |s| ra(s),
             },
         );
         pa(&mut state);
