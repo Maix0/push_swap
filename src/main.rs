@@ -6,6 +6,8 @@ use std::{
     ops::Add,
 };
 
+mod checker;
+
 use itertools::Itertools;
 use rand::prelude::*;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -137,8 +139,10 @@ fn count_following<Item: Copy + PartialEq + Eq, Iter: Iterator<Item = Item>>(
     out
 }
 
-fn optimize_moves(state: &mut State, mut cpy: State) -> usize {
-    let mut output = count_following(state.moves.iter().copied()).into_iter();
+fn optimize_moves(state: &mut State, mut cpy: impl IntoIterator<Item = i32>) -> usize {
+    let mut output = count_following(state.moves.iter().copied())
+        .into_iter()
+        .peekable();
     let mut o = Vec::<(Move, usize)>::new();
     while let Some(m) = output.next() {
         match m.0 {
@@ -146,11 +150,17 @@ fn optimize_moves(state: &mut State, mut cpy: State) -> usize {
                 o.push(m);
             }
             Move::RotateBoth | Move::RevRotateBoth => {
-                let count = std::iter::once(m).chain(
-                    (&mut output)
-                        .take_while_ref(|e| matches!(e.0, Move::RotateBoth | Move::RevRotateBoth))
-                        .collect::<Vec<_>>(),
-                );
+                let count = std::iter::once(m)
+                    .chain(std::iter::from_fn(|| {
+                        output.peek().copied().and_then(|s| {
+                            if matches!(s.0, Move::RotateBoth | Move::RevRotateBoth) {
+                                output.next()
+                            } else {
+                                None
+                            }
+                        })
+                    }))
+                    .collect::<Vec<_>>();
                 let mut tot = 0_isize;
                 for (ty, c) in count {
                     tot += c as isize
@@ -167,11 +177,17 @@ fn optimize_moves(state: &mut State, mut cpy: State) -> usize {
                 }
             }
             Move::RotateA | Move::RevRotateA => {
-                let count = std::iter::once(m).chain(
-                    (&mut output)
-                        .take_while_ref(|e| matches!(e.0, Move::RotateA | Move::RevRotateA))
-                        .collect::<Vec<_>>(),
-                );
+                let count = std::iter::once(m)
+                    .chain(std::iter::from_fn(|| {
+                        output.peek().copied().and_then(|s| {
+                            if matches!(s.0, Move::RotateA | Move::RevRotateA) {
+                                output.next()
+                            } else {
+                                None
+                            }
+                        })
+                    }))
+                    .collect::<Vec<_>>();
                 let mut tot = 0_isize;
                 for (ty, c) in count {
                     tot += c as isize
@@ -188,11 +204,17 @@ fn optimize_moves(state: &mut State, mut cpy: State) -> usize {
                 }
             }
             Move::RotateB | Move::RevRotateB => {
-                let count = std::iter::once(m).chain(
-                    (&mut output)
-                        .take_while_ref(|e| matches!(e.0, Move::RotateB | Move::RevRotateB))
-                        .collect::<Vec<_>>(),
-                );
+                let count = std::iter::once(m)
+                    .chain(std::iter::from_fn(|| {
+                        output.peek().copied().and_then(|s| {
+                            if matches!(s.0, Move::RotateB | Move::RevRotateB) {
+                                output.next()
+                            } else {
+                                None
+                            }
+                        })
+                    }))
+                    .collect::<Vec<_>>();
                 let mut tot = 0_isize;
                 for (ty, c) in count {
                     tot += c as isize
@@ -210,9 +232,86 @@ fn optimize_moves(state: &mut State, mut cpy: State) -> usize {
             }
         }
     }
+
+    use std::io::Write;
+
+    let inputs = cpy.into_iter().collect::<Vec<_>>();
+    /*let mut numbers = std::fs::File::options()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open("numbers")
+        .unwrap();
+    for n in &inputs {
+        write!(&mut numbers, "{n} ").unwrap();
+    }
+    let mut moves = std::fs::File::options()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open("moves")
+        .unwrap();
+
+    //if !PRINT_ACTIONS {
+    for n in &mut state.moves {
+        writeln!(
+            &mut moves,
+            "{}",
+            match n {
+                Move::PushA => "pa",
+                Move::PushB => "pb",
+                Move::SwapA => "sa",
+                Move::SwapB => "sb",
+                Move::SwapBoth => "ss",
+                Move::RotateA => "ra",
+                Move::RotateB => "rb",
+                Move::RotateBoth => "rr",
+                Move::RevRotateA => "rra",
+                Move::RevRotateB => "rrb",
+                Move::RevRotateBoth => "rrr",
+            }
+        )
+        .unwrap();
+    }*/
+    //}
+    // /*
+    eprintln!(
+        "before did work ? {}",
+        checker::check(inputs.iter().copied(), state.moves.iter().copied())
+    );
+    // */
+    /*
+    eprintln!(
+        "optimized did work ? {}",
+        checker::check(
+            inputs.iter().copied(),
+            o.iter()
+                .copied()
+                .flat_map(|s| std::iter::repeat(s.0).take(s.1)),
+        )
+    );*/
+
+    /*eprintln!(
+        "before {:?}\n\nafter:{:?}",
+        state.moves,
+        o.iter()
+            .copied()
+            .flat_map(|s| std::iter::repeat(s.0).take(s.1))
+            .collect::<Vec<_>>()
+    );*/
+    /*eprintln!(
+        "{:?}",
+        count_following(
+            o.iter()
+                .copied()
+                .flat_map(|s| std::iter::repeat(s.0).take(s.1))
+        )
+    );*/
+
     o.iter().map(|s| s.1).sum::<usize>()
 }
 
+const PRINT_ACTIONS: bool = true;
 fn is_sorted<I>(data: I) -> bool
 where
     I: IntoIterator,
@@ -220,7 +319,7 @@ where
 {
     data.into_iter().tuple_windows().all(|(a, b)| a <= b)
 }
-
+/*
 fn main() {
     let iter_size = std::env::args()
         .nth(1)
@@ -302,16 +401,49 @@ fn main() {
             target as usize
         );
     }
-}
+}*/
 
-const PRINT_ACTIONS: bool = false;
+fn main() {
+    let mut moves = std::fs::File::options()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open("moves")
+        .unwrap();
+    drop(moves);
+    let numbers = std::env::args()
+        .skip(1)
+        .map(|s| s.parse().unwrap())
+        .collect::<Vec<i32>>();
+    use std::io::Write as _;
+    let mut file_num = std::fs::File::options()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open("numbers")
+        .unwrap();
+    for n in &numbers {
+        write!(&mut file_num, "{n} ");
+    }
+    run_with_items(numbers.iter().copied());
+}
 
 macro_rules! print_action {
     ($state:expr, $($t:tt)*) => {
         if PRINT_ACTIONS {
-            let writer: &mut dyn std::io::Write = &mut std::io::stderr();
-            writeln!(writer, $($t)*).unwrap();
-        }
+        use std::io::Write as _;
+        let fmt = format_args!($($t)*);
+            let writer: &mut dyn std::io::Write = &mut std::io::stdout();
+            writeln!(writer, "{}", &fmt).unwrap();
+
+        let mut moves = std::fs::File::options()
+            .create(true)
+            .append(true)
+            .write(true)
+            .open("moves")
+            .unwrap();
+            writeln!(&mut moves, "{}", &fmt).unwrap();
+            }
     };
 }
 fn ra(state: &mut State) {
@@ -663,7 +795,7 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
     };
     //println!("{:?}", state.a);
 
-    let state_cpy = state.clone();
+    let input = state.a.clone();
 
     // Create the output elements in good order !
     state.sorted = state.a.clone().into_iter().map(|e| (e, false)).collect();
@@ -672,8 +804,8 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
         .make_contiguous()
         .sort_unstable_by_key(|(e, _)| *e);
     state.sorted.make_contiguous();
-    while (state.a.len() > 2 && is_sorted(&state.a)) {
-        state.a.make_contiguous().shuffle(&mut thread_rng());
+    if is_sorted(&state.a) {
+        return Ok((0, 0));
     }
     // init
     pb(&mut state);
@@ -692,7 +824,7 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
     // end of init
     // sorting
     //println!("before_sorting");
-    while state.a.len() > 3 {
+    while state.a.len() > 2 {
         let best_move = (0..(state.a.len()))
             .map(|index| {
                 let mut out = 0;
@@ -828,7 +960,7 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
     rotation.action(&mut state, StackSelector::A);
     // everything should be in the correct place !
     if is_sorted(state.a.iter()) {
-        Ok((state.counts, optimize_moves(&mut state, state_cpy)))
+        Ok((state.counts, optimize_moves(&mut state, input)))
     } else {
         //println!("{back}");
         dbg!(&state.a);
