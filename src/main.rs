@@ -275,7 +275,7 @@ fn optimize_moves(state: &mut State, mut cpy: impl IntoIterator<Item = i32>) -> 
     }*/
     //}
     // /*
-    eprintln!(
+    /*eprintln!(
         "before did work ? {}",
         checker::check(inputs.iter().copied(), state.moves.iter().copied())
     );
@@ -401,8 +401,9 @@ fn main() {
             target as usize
         );
     }
-}*/
-
+}
+*/
+// /*
 fn main() {
     let mut moves = std::fs::File::options()
         .create(true)
@@ -427,7 +428,7 @@ fn main() {
     }
     run_with_items(numbers.iter().copied());
 }
-
+// */
 macro_rules! print_action {
     ($state:expr, $($t:tt)*) => {
         if PRINT_ACTIONS {
@@ -571,7 +572,6 @@ fn sort_three(state: &mut State, selector: StackSelector, min_first: bool) {
         StackSelector::B => [sb, rb, rrb],
     };
     match stack!().len() {
-        0 | 1 | 4.. => return,
         2 => {
             let func = match min_first {
                 true => PartialOrd::gt,
@@ -584,6 +584,7 @@ fn sort_three(state: &mut State, selector: StackSelector, min_first: bool) {
             return;
         }
         3 => {}
+        0 | 1 | 4.. => return,
     }
     let mut c = stack!().clone();
     macro_rules! comb {
@@ -824,7 +825,7 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
     // end of init
     // sorting
     //println!("before_sorting");
-    while state.a.len() > 2 {
+    while state.a.len() > state.b.len() {
         let best_move = (0..(state.a.len()))
             .map(|index| {
                 let mut out = 0;
@@ -851,21 +852,74 @@ fn run_with_items(items: impl Iterator<Item = i32>) -> Result<(usize, usize), ()
             .position_min();
         do_move(&mut state, best_move.unwrap_or(0));
     }
+    let mut l = state.a.len();
+    while !state.a.is_empty() {
+        pb(&mut state);
+    }
+
+    state.sorted.make_contiguous().reverse();
+    state.sorted.iter_mut().for_each(|t| t.1 = false);
+
+    /* for n in 0..l {
+        let best_move = (0..n)
+            .map(|index| {
+                let mut out = 0;
+                let func = |i: &mut &mut i32| {
+                    **i += 1;
+                };
+                run_func_with_best_rotate_for_item(
+                    index,
+                    &state,
+                    StackSelector::B,
+                    true,
+                    RotationData {
+                        args: &mut out,
+                        main_forward: func,
+                        main_reverse: func,
+                        dual_forward: func,
+                        dual_reverse: func,
+                        other_forward: func,
+                        other_reverse: func,
+                    },
+                );
+                out
+            })
+            .position_min();
+        run_func_with_best_rotate_for_item(
+            best_move.unwrap_or(0),
+            fuck_mut(&mut state),
+            StackSelector::B,
+            true,
+            RotationData {
+                args: fuck_mut(&mut state),
+                main_forward: |s| rra(s),
+                main_reverse: |s| ra(s),
+                dual_forward: |s| rrr(s),
+                dual_reverse: |s| rr(s),
+                other_forward: |s| rrb(s),
+                other_reverse: |s| rb(s),
+            },
+        );
+        pa(&mut state);
+        for item in &state.a {
+            if let Some(e) = state.sorted.iter_mut().find(|(e, _)| e == item) {
+                e.1 = true;
+            }
+        }
+    } */
 
     //println!("before merging: {}", state.counts);
-    sort_three(&mut state, StackSelector::A, true);
+    //sort_three(&mut state, StackSelector::A, true);
     //let index = find_place(state.a[0], &state);
 
     // end of sorting
-    target(
+    /*target(
         0,
         state.b.iter().position_max().unwrap_or_default(),
         state.b.len(),
     )
     .action(&mut state, StackSelector::B);
-
-    state.sorted.make_contiguous().reverse();
-    state.sorted.iter_mut().for_each(|t| t.1 = false);
+    */
 
     for item in &state.a {
         if let Some(e) = state.sorted.iter_mut().find(|(e, _)| e == item) {
